@@ -263,6 +263,23 @@ PRODUCT_OWNER_SYSTEM_PROMPT = (
 )
 
 
+ANSWER_STYLE_PROMPT = (
+    " Response style for every role: answer the main question in the first sentence. "
+    "Use concise, plain international English when answering in English: familiar words, "
+    "short sentences, active voice, and correct natural grammar. "
+    "Avoid idioms, slang, ornate native-speaker phrasing, corporate jargon, filler, "
+    "and long introductions. Keep necessary product and technical terms. "
+    "Default to 3-5 short sentences, around 50-90 words or fewer when sufficient. "
+    "Give the answer, the concrete action, and one reason or trade-off only if useful. "
+    "Include at most one brief example unless more are explicitly requested. "
+    "For follow-ups, answer only the new point in 2-3 short sentences; do not repeat "
+    "the overview or force a checklist. Expand only when the question requires it. "
+    "Apply the same brevity and directness in Vietnamese. "
+    "These style rules take precedence over earlier formatting or length instructions; "
+    "preserve factual accuracy and never invent experience or results."
+)
+
+
 class GPTProcessor:
     def __init__(self, model: str = "gpt-4o-mini", client=None, knowledge_base=None):
         if client is None:
@@ -667,14 +684,14 @@ class GPTProcessor:
                         "Cau hoi ve platform/tool cu the (OutSystems, Webflow, React...) thi tra loi trong pham vi platform do, suy luan context hop ly. "
                         "Khong dich caption. Khong lap lai cau hoi."
                         )
-                    ),
+                    ) + ANSWER_STYLE_PROMPT,
                 },
                 {
                     "role": "user",
                     "content": (
                         f"Caption la tieng Viet: {'co' if is_vietnamese_caption else 'khong'}. BAT BUOC tra loi cung ngon ngu voi caption: neu la tieng Anh thi tra loi TIENG ANH, neu la tieng Viet thi tra loi TIENG VIET.\n"
                         f"Loai cau hoi: {'follow-up dao sau' if is_followup else 'cau hoi moi/doc lap'}\n"
-                        f"Yeu cau dac biet: {'Neu la follow-up thi tra loi phan dao sau moi, checklist hanh dong cu the 5-8 buoc, khong lap lai tong quan.' if is_followup else 'Tra loi ngan gon dung trong tam.'}\n\n"
+                        f"Yeu cau dac biet: {'Neu la follow-up thi chi tra loi y moi bang 2-3 cau ngan, khong lap lai tong quan.' if is_followup else 'Tra loi ngan gon dung trong tam.'}\n\n"
                         f"Luu y: neu caption la mot manh cau hoi ngan (fragment) nhung co ngu canh, hay suy luan no la follow-up hop le va tra loi truc tiep.\n\n"
                         f"Ngu canh gan day:\n{recent_context if recent_context else '(khong co)'}\n\n"
                         f"{reference_block}"
