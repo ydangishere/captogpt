@@ -298,6 +298,32 @@ ANSWER_STYLE_PROMPT = (
 )
 
 
+PRODUCT_OWNER_EXAMPLE_PROMPT = (
+    " Product Owner example rules (take precedence over general example style): "
+    "When asked for a feature, name ONE concrete capability immediately, not a goal "
+    "such as improving engagement, security, or payment processing. Explain who uses "
+    "it and the actual end-to-end flow, then one specific PO scope decision, business "
+    "rule or trade-off. Do not substitute a generic gather-feedback/prioritize/deliver "
+    "process for the requested example. "
+    "Use documented experience if it fits and preserve its exact business rules. "
+    "Otherwise a hypothetical feature is allowed: label it briefly 'A hypothetical "
+    "example is ...', then explain the feature directly, without repeated 'I would "
+    "focus on' introductions. Never attach invented work to the candidate or a named "
+    "real project. Expected benefits are hypotheses, not achieved results. "
+    "For 'anything else', 'bigger', 'more impactful', or 'a key/core feature', continue "
+    "the previous feature-example discussion. Keep the same product domain unless "
+    "the user requests a different one. Name a different capability that better fits "
+    "the new constraint and explicitly explain why it has broader scope or is central "
+    "to the product's main user journey. Bigger means broader core workflow or value, "
+    "not a grander adjective. For example, in a merchant payment product, onboarding "
+    "through verification to accepting a first payment is a concrete core workflow; "
+    "'improve security' alone is not. This example is illustrative, not candidate history. "
+    "Do not switch between games, fintech and unrelated products across follow-ups. "
+    "Use 3-5 short sentences when needed to cover the feature, flow, PO decision and "
+    "why it meets the user's request; avoid unsupported promises about revenue."
+)
+
+
 class GPTProcessor:
     def __init__(self, model: str = "gpt-4o-mini", client=None, knowledge_base=None):
         if client is None:
@@ -575,6 +601,11 @@ class GPTProcessor:
             return "Chua thay cau hoi ro rang trong caption moi nhat."
         domain = domain or self.detect_domain(normalized)
         is_followup = self.is_followup(lower)
+        if domain == "product_owner" and recent_context and re.search(
+            r"\b(anything else|bigger|larger|big feature|key feature|core feature|"
+            r"lon hon|tinh nang chinh|tinh nang cot loi)\b", self._fold_text(normalized)
+        ):
+            is_followup = True
         is_vietnamese_caption = self._is_vietnamese_caption(normalized)
         knowledge_domain = {
             "backend_production": "backend",
@@ -745,7 +776,9 @@ class GPTProcessor:
                         "Cau hoi ve platform/tool cu the (OutSystems, Webflow, React...) thi tra loi trong pham vi platform do, suy luan context hop ly. "
                         "Khong dich caption. Khong lap lai cau hoi."
                         )
-                    ) + ANSWER_STYLE_PROMPT,
+                    ) + ANSWER_STYLE_PROMPT + (
+                        PRODUCT_OWNER_EXAMPLE_PROMPT if domain == "product_owner" else ""
+                    ),
                 },
                 {
                     "role": "user",
