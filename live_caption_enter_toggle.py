@@ -1,4 +1,5 @@
 import os
+import msvcrt
 import re
 import time
 import threading
@@ -261,7 +262,9 @@ PRODUCT_OWNER_SYSTEM_PROMPT = (
     "Uu tien narrative ngan: tinh huong -> cach danh gia -> quyet dinh -> trade-off/ket qua. "
     "Cau hoi tieng Viet tra loi tieng Viet; cau hoi tieng Anh tra loi tieng Anh. "
     "Neu la follow-up, chi dao sau phan moi dua tren ngu canh gan nhat. "
-    "Neu cau hoi khong thuoc product, tra loi truc tiep theo domain do va dung su that."
+    "Voi cau hoi ky thuat, dung kien thuc Backend nhung giu vai Product Owner: "
+    "giai thich cach hoat dong, tac dong san pham, risk, trade-off va phoi hop Engineering. "
+    "Neu duoc hoi sau, giai thich ky thuat cu the nhung khong tu nhan la nguoi viet code."
 )
 
 
@@ -591,10 +594,22 @@ class GPTProcessor:
             r"du an|kinh nghiem|tinh nang|vi du)\b", self._fold_text(retrieval_query)
         ):
             retrieval_query += " VietPay WWE Champions Sync Contacts"
-        knowledge_context = self.knowledge_base.search(
-            retrieval_query,
-            domain=knowledge_domain,
-        )
+        if domain == "product_owner":
+            # The speaking role is fixed; reference sources can cross domains.
+            product_context = self.knowledge_base.search(
+                retrieval_query, domain="product-owner", limit=2, max_chars=2600,
+            )
+            technical_context = self.knowledge_base.search(
+                normalized if not is_followup else retrieval_query,
+                domain="backend", limit=1, max_chars=1398,
+            )
+            knowledge_context = "\n\n".join(
+                part for part in (product_context, technical_context) if part
+            )
+        else:
+            knowledge_context = self.knowledge_base.search(
+                retrieval_query, domain=knowledge_domain,
+            )
         reference_block = ""
         if knowledge_context:
             reference_block = (
@@ -755,6 +770,8 @@ class GPTProcessor:
 class EnterToggleController:
     def __init__(self):
         self.active = False
+        self.selected_role = None
+        self.role_version = 0
         self.last_line = ""
         self.lock = threading.Lock()
         self.last_toggle_time = 0.0
@@ -1064,8 +1081,28 @@ class EnterToggleController:
             return 0.0
         return len(set_a & set_b) / max(1, len(set_a))
 
+    def select_role(self, role: str):
+        with self.lock:
+            self.selected_role = role
+            self.role_version += 1
+            self.active = False
+            self.pending_caption = ""
+            self.pending_stable_ticks = 0
+            self.last_line = ""
+            self.last_sent_caption_normalized = ""
+            self.last_caption_signature = ""
+            self.recent_sent_captions.clear()
+            self.answered_signatures.clear()
+            for bucket in self.recent_payloads_by_domain.values():
+                bucket.clear()
+            self.last_non_general_domain = role
+        label = "Product Owner" if role == "product_owner" else "Backend Engineer"
+        print("\n[ROLE] " + label + " | Capture OFF. Press Enter to start. F2: switch role.")
+
     def resolve_domain_for_request(self, detected_domain: str, is_followup: bool, payload: str) -> str:
         with self.lock:
+            if self.selected_role is not None:
+                return self.selected_role
             if detected_domain != "general":
                 return detected_domain
             # Generic interview questions retain the current interview role;
@@ -1201,7 +1238,14 @@ def main():
     gpt = GPTProcessor(model="gpt-4o-mini")
     ctrl = EnterToggleController()
 
-    print("Ready.")
+    print("Choose interview role: 1 - Product Owner | 2 - Backend Engineer")
+    while True:
+        choice = input("Role [1/2]: ").strip()
+        if choice in ("1", "2"):
+            break
+        print("Please enter 1 or 2.")
+    ctrl.select_role("product_owner" if choice == "1" else "backend_production")
+    print("Ready. F2 switches role and clears conversation context.")
     print("Press Enter to START capture.")
     print("While ON, app waits caption complete, then sends to GPT.")
     print("Press Enter again to STOP sending.")
@@ -1210,8 +1254,13 @@ def main():
     def input_toggle_loop():
         while True:
             try:
-                input()
-                ctrl.on_manual_enter()
+                key = msvcrt.getwch()
+                if key in ("\x00", "\xe0"):
+                    if msvcrt.getwch() == "<":  # Windows console F2
+                        role = "backend_production" if ctrl.selected_role == "product_owner" else "product_owner"
+                        ctrl.select_role(role)
+                elif key == "\r":
+                    ctrl.on_manual_enter()
             except EOFError:
                 break
             except Exception as e:
@@ -1232,6 +1281,7 @@ def main():
                     print(colorize(_format_for_terminal(caption_text), ANSI_BLUE))
 
                     try:
+                        request_version = ctrl.role_version
                         detected_domain = gpt.detect_domain(payload)
                         is_followup = gpt.is_followup(payload)
                         domain = ctrl.resolve_domain_for_request(detected_domain, is_followup, payload)
@@ -1241,6 +1291,8 @@ def main():
                             recent_context=context_text,
                             domain=domain,
                         )
+                        if request_version != ctrl.role_version:
+                            continue  # Discard the old role's in-flight response.
                         gpt_color = ANSI_ORANGE if ANSI_SUPPORTED else ANSI_YELLOW
                         print(colorize("\n[GPT RESULT]", gpt_color))
                         print(colorize(_format_for_terminal(result), gpt_color))
@@ -1252,8 +1304,9 @@ def main():
                         if not is_unclear:
                             ctrl.remember_exchange(payload, result, domain)
                     except Exception as e:
-                        ctrl.allow_retry_for_payload(payload)
-                        print(f"\n[GPT ERROR] {e}")
+                        if request_version == ctrl.role_version:
+                            ctrl.allow_retry_for_payload(payload)
+                            print(f"\n[GPT ERROR] {e}")
             except Exception as e:
                 print(f"\n[WARN] Runtime read error (auto-retry): {e}")
 
