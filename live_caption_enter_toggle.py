@@ -282,7 +282,15 @@ ANSWER_STYLE_PROMPT = (
     "Compare that subject with X; never substitute a topic merely because it appears "
     "in retrieved reference knowledge. If the subject is genuinely unavailable, ask "
     "one short clarification instead of inventing the comparison. "
-    "These style rules take precedence over earlier formatting or length instructions; "
+    "When the user asks for 'something else', 'another example', or 'more impactful', "
+    "continue the most recent example request with a DIFFERENT documented example "
+    "of the same kind. Do not switch to generic improvement or launch advice. "
+    "For personal experience, only claim actions, projects and results supported by "
+    "the reference knowledge or facts explicitly provided by the user. Prior generated "
+    "answers are conversation context, not evidence that an experience actually happened. "
+    "If a more impactful example is not documented, say that briefly rather than "
+    "inventing a feature, ownership, metrics or business impact. "
+    "These rules override earlier persona, example and formatting instructions; "
     "preserve factual accuracy and never invent experience or results."
 )
 
@@ -427,6 +435,14 @@ class GPTProcessor:
         ):
             return True
         followup_markers = (
+            "something else",
+            "another example",
+            "different example",
+            "more impactful",
+            "better example",
+            "another one",
+            "vi du khac",
+            "tac dong lon hon",
             "mentioned above",
             "issue above",
             "that issue",
@@ -562,11 +578,19 @@ class GPTProcessor:
             "product_owner": "product-owner",
         }.get(domain, "general")
         retrieval_query = normalized
+        previous_questions = []
         if is_followup and recent_context:
             previous_questions = re.findall(r"^Q: (.+)$", recent_context, re.MULTILINE)
             if previous_questions:
-                previous_question = self._normalize_technical_terms(previous_questions[-1])
+                previous_question = self._normalize_technical_terms(" ".join(previous_questions[-3:]))
                 retrieval_query = previous_question + " " + normalized
+        # English experience questions need the named, documented cases too,
+        # since the local reference material is mostly Vietnamese.
+        if domain == "product_owner" and re.search(
+            r"\b(project|experience|feature|built|build|worked|example|"
+            r"du an|kinh nghiem|tinh nang|vi du)\b", self._fold_text(retrieval_query)
+        ):
+            retrieval_query += " VietPay WWE Champions Sync Contacts"
         knowledge_context = self.knowledge_base.search(
             retrieval_query,
             domain=knowledge_domain,
@@ -1044,7 +1068,9 @@ class EnterToggleController:
         with self.lock:
             if detected_domain != "general":
                 return detected_domain
-            if is_followup and self.last_non_general_domain != "general":
+            # Generic interview questions retain the current interview role;
+            # only an explicit domain signal switches it.
+            if self.last_non_general_domain != "general":
                 return self.last_non_general_domain
             return detected_domain
 
