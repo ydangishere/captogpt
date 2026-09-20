@@ -64,6 +64,34 @@ Purpose:
 5. Press `Enter` again to stop sending.
 6. Read GPT output in terminal.
 
+## Update the knowledge base
+
+Reference knowledge is stored by role instead of being embedded in the Python
+script:
+
+```text
+knowledge/
+  backend/        # Java/Python/backend interview knowledge
+  product-owner/  # Product Owner experience and case studies
+```
+
+To add or update knowledge:
+
+1. Edit an existing `.md` file or add a new one under the matching role folder.
+2. Use `##` headings to separate searchable topics.
+3. Restart the app so it reloads the files.
+
+The app detects Product Owner questions from signals such as roadmap, backlog,
+prioritization, discovery, stakeholder, user story, and product metrics. It then
+switches to the Product Owner system prompt and searches only
+`knowledge/product-owner/`. Backend questions continue using the existing
+backend prompt and `knowledge/backend/`. Follow-up questions keep the recent
+context for the selected role.
+
+For every completed caption, at most three relevant sections are sent to GPT.
+If a role folder has no matching knowledge, GPT still answers using that role's
+system prompt. The way you start, stop, and use the app does not change.
+
 ## Notes
 
 - Live Captions is system-level, not Chrome-only.
