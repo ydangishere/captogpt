@@ -414,13 +414,13 @@ class GPTProcessor:
             "chatgpt",
         )
 
-        if any(k in t for k in product_owner_keywords):
+        if any(re.search(r"(?<!\w)" + re.escape(k) + r"(?!\w)", t) for k in product_owner_keywords):
             return "product_owner"
-        if any(k in t for k in backend_keywords):
+        if any(re.search(r"(?<!\w)" + re.escape(k) + r"(?!\w)", t) for k in backend_keywords):
             return "backend_production"
-        if any(k in t for k in frontend_tool_keywords):
+        if any(re.search(r"(?<!\w)" + re.escape(k) + r"(?!\w)", t) for k in frontend_tool_keywords):
             return "frontend_tooling"
-        if any(k in t for k in ai_meta_keywords):
+        if any(re.search(r"(?<!\w)" + re.escape(k) + r"(?!\w)", t) for k in ai_meta_keywords):
             return "ai_meta"
         return "general"
 
