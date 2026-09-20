@@ -113,14 +113,15 @@ class LiveCaptionReader:
 
     def _find_window(self):
         desktop = Desktop(backend="uia")
-        for w in desktop.windows():
+        windows = desktop.windows()
+        for w in windows:
             title = (w.window_text() or "").strip()
             if not title or self._is_excluded(title):
                 continue
             if any(re.search(p, title, re.I) for p in self._TITLE_PATTERNS):
                 return w
         # Chrome: caption bubble la child cua Chrome (phai co "caption" ro rang trong title)
-        for w in desktop.windows():
+        for w in windows:
             title = (w.window_text() or "").strip()
             if self._is_excluded(title):
                 continue
@@ -145,11 +146,12 @@ class LiveCaptionReader:
 
     def _read_chunks(self, win) -> list:
         chunks = []
+        # Probe immediately: the outer polling loop retries missing controls.
         # Uu tien CaptionsTextBlock - co the chua TOAN BO text trong 1 block
         for auto_id in ("CaptionsTextBlock", "CaptionTextBlock", "CaptionText"):
             try:
                 child = win.child_window(auto_id=auto_id, control_type="Text")
-                if child.exists(timeout=0.6):
+                if child.exists(timeout=0):
                     t = (child.window_text() or "").strip()
                     if t and len(t) > 2 and not self._looks_like_caption_title_only(t):
                         return [t]
@@ -157,7 +159,7 @@ class LiveCaptionReader:
                 pass
         try:
             child = win.child_window(auto_id="CaptionsTextBlock")
-            if child.exists(timeout=0.5):
+            if child.exists(timeout=0):
                 t = (child.window_text() or "").strip()
                 if t and len(t) > 2 and not self._looks_like_caption_title_only(t):
                     return [t]
@@ -1184,7 +1186,7 @@ def main():
             except Exception as e:
                 print(f"\n[WARN] Runtime read error (auto-retry): {e}")
 
-            time.sleep(0.28)
+            time.sleep(0.15)
     except KeyboardInterrupt:
         print("\nExiting...")
 
