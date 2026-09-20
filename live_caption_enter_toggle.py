@@ -879,6 +879,31 @@ class EnterToggleController:
         if self._caption_signature(current) in self.answered_signatures:
             return ""
 
+        # Live Captions rolls forward: a new snapshot can start with the
+        # tail of an already answered snapshot. Match whole tokens exactly,
+        # then slice the original text to preserve accents and punctuation.
+        spans = list(re.finditer(r"\w+", current, re.UNICODE))
+        current_tokens = [GPTProcessor._fold_text(m.group()) for m in spans]
+        overlap = 0
+        for previous in self.recent_sent_captions:
+            previous_tokens = re.findall(r"\w+", previous, re.UNICODE)
+            for size in range(min(len(previous_tokens), len(current_tokens)), 7, -1):
+                if size <= overlap:
+                    break
+                if previous_tokens[-size:] != current_tokens[:size]:
+                    continue
+                # A sentence boundary avoids stripping a repeated opening
+                # from a different question (for example "How do you ...").
+                end = spans[size - 1].end()
+                next_start = spans[size].start() if size < len(spans) else len(current)
+                if re.search(r"[?!.]", current[end:next_start]):
+                    overlap = size
+                    break
+        if overlap:
+            if overlap == len(spans):
+                return ""
+            current = current[spans[overlap].start():].strip()
+
         # Only remove an exactly matched, completed sentence prefix.
         # Partial/fuzzy matches may be the beginning of a new question.
         while current:
