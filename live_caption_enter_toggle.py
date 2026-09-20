@@ -826,111 +826,37 @@ class EnterToggleController:
 
     @staticmethod
     def _extract_last_language_segment(text: str) -> str:
-        """Khi caption co ca EN va VI (do doi ngon ngu), chi lay phan moi nhat (ngon ngu vua chuyen)."""
-        if not text or len(text) < 4:
-            return text
-        # Co chu Viet (dau hoac tu pho bien, ca co dau va khong dau)
-        has_vi = bool(re.search(r"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]", text, re.I))
-        has_vi |= bool(re.search(r"\b(nếu|neu|bạn|ban|có|co|không|khong|được|duoc|phát|phat|hiện|hien|thiết|thiet|kế|ke|hệ|he|thống|thong|thông|tin|nhạy|nhay|cảm|cam)\b", text, re.I))
-        if not has_vi:
-            return text
-        # Tim vi tri bat dau doan Viet (phan them vao khi chuyen sang VI)
-        vi_start = re.search(r"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]|\b(nếu|neu|bạn|ban|có|co|không|khong|được|duoc|phát|phat|hiện|hien|thiết|thiet|kế|ke|hệ|he|thống|thong|thông|tin|nhạy|nhay|cảm|cam)\b", text, re.I)
-        if vi_start and vi_start.start() > 20:
-            return text[vi_start.start():].strip()
+        # A language change can occur inside a question; never cut at that point.
         return text
 
     def _extract_delta_caption(self, caption: str) -> str:
-        # Don gian: gui nguyen caption on dinh. Chi loai nhung phan da tra loi (signature).
-        # Khi co ca EN va VI (doi ngon ngu), chi gui phan moi nhat. Chay truoc normalize (vi normalize bo dau).
-        caption = self._extract_last_language_segment(caption)
-        current = self._normalize_caption(caption)
+        # Preserve the original Unicode text. Folding is only for comparisons.
+        current = re.sub(r"\s+", " ", caption).strip()
         if not current:
             return ""
-        if current == self.last_sent_caption_normalized:
+        normalized = self._normalize_caption(current)
+        if normalized == self.last_sent_caption_normalized:
+            return ""
+        if self._caption_signature(current) in self.answered_signatures:
             return ""
 
-        # Buoc 1: Neu current CHUA mot prev da gui, lay phan sau vi tri xuat hien cuoi cung cua prev.
-        # Giai quyet truong hop: current = phan_cu + phan_moi (phan cu khong o dau)
-        best_end = -1
-        for prev in self.recent_sent_captions:
-            if not prev or len(prev) <= 15:
-                continue
-            idx = current.rfind(prev)
-            if idx >= 0:
-                end = idx + len(prev)
-                if end > best_end and len(current) - end >= 20:
-                    best_end = end
-        if best_end > 0:
-            tail = current[best_end:].strip().lstrip(".,;: ")
-            if len(tail.split()) >= 3:
-                current = tail
-
-        # Buoc 2: Strip caption da gui (prefix/suffix match).
-        for prev in reversed(list(self.recent_sent_captions)):
-            if not prev or len(prev) <= 15:
-                continue
-            stripped = None
-            prev_tokens = prev.split()
-            current_tokens = current.split()
-            # 1) Full match: current bat dau bang prev (hoac token-based 85%)
-            if len(current_tokens) > len(prev_tokens) + 2:
-                n = min(len(prev_tokens), len(current_tokens))
-                match_count = sum(1 for i in range(n) if current_tokens[i] == prev_tokens[i])
-                if match_count >= n * 0.85:
-                    current_tokens = current_tokens[n:]
-                    while len(current_tokens) >= len(prev_tokens) and current_tokens[:len(prev_tokens)] == prev_tokens:
-                        current_tokens = current_tokens[len(prev_tokens):]
-                    if len(current_tokens) >= 3:
-                        stripped = " ".join(current_tokens)
-            if not stripped:
-                tmp = current
-                while prev and (tmp.startswith(prev) or tmp.startswith(prev.rstrip() + " ")):
-                    tmp = tmp[len(prev):].lstrip(" .,;: ")
-                    if not tmp:
-                        break
-                if tmp and len(tmp.split()) >= 3:
-                    stripped = tmp
-            # 2) Partial: current bat dau bang phan cuoi cua prev (it nhat 5 tu)
-            if not stripped and len(prev_tokens) >= 5:
-                for i in range(len(prev_tokens) - 4):
-                    suffix_tokens = prev_tokens[i:]
-                    suffix = " ".join(suffix_tokens)
-                    if len(current_tokens) >= len(suffix_tokens) + 3:
-                        match = sum(1 for j in range(len(suffix_tokens)) if current_tokens[j] == suffix_tokens[j])
-                        if match >= len(suffix_tokens) * 0.85:
-                            remainder = current_tokens[len(suffix_tokens):]
-                            if len(remainder) >= 3:
-                                stripped = " ".join(remainder)
-                                break
-            if not stripped and prev in current:
-                idx = current.rfind(prev)
-                if idx >= 0:
-                    tail = current[idx + len(prev):].strip()
-                    if len(tail.split()) >= 3:
-                        stripped = tail
-            if stripped and len(stripped.split()) >= 3:
-                current = stripped
-
-        units = self._split_caption_units(current)
-        if not units:
-            units = [current]
-
-        new_units = []
-        recent_norm_set = set(self.recent_sent_captions)
-        for u in units:
-            sig = self._caption_signature(u)
-            if not sig or sig in self.answered_signatures:
-                continue
-            # Bo qua unit da co trong caption da gui (tranh gui lai cau cu)
-            u_norm = self._normalize_caption(u)
-            if any(u_norm in r for r in recent_norm_set if r and len(r) > 10):
-                continue
-            if new_units and self._caption_signature(new_units[-1]) == sig:
-                continue
-            new_units.append(u)
-
-        return " ".join(new_units).strip() if new_units else ""
+        # Only remove an exactly matched, completed sentence prefix.
+        # Partial/fuzzy matches may be the beginning of a new question.
+        while current:
+            removed = False
+            for boundary in re.finditer(r"[?!.]+(?:\s+|$)", current):
+                prefix = current[:boundary.end()].strip()
+                prefix_norm = self._normalize_caption(prefix)
+                if (
+                    prefix_norm in self.recent_sent_captions
+                    or self._caption_signature(prefix) in self.answered_signatures
+                ):
+                    current = current[boundary.end():].strip()
+                    removed = True
+                    break
+            if not removed:
+                break
+        return current
 
     def _looks_like_intent(self, text: str) -> bool:
         t = text.lower()
