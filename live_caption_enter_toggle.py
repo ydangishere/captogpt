@@ -328,7 +328,14 @@ PRODUCT_OWNER_EXAMPLE_PROMPT = (
     "or 'core feature', continue the same product domain and example discussion unless "
     "the user asks to change it. Give another concrete capability and explain why "
     "it better meets the requested scope or importance. Keep terminology and business "
-    "rules consistent across follow-ups. Use plain international English, normally "
+    "rules consistent across follow-ups. A question such as 'What is it tech stack "
+    "about?' immediately after discussing a website means 'What is that website's "
+    "tech stack?' Resolve the reference, name the website, and address that question. "
+    "Do not respond with a definition of tech stack or a list of unrelated technologies. "
+    "Broad practice examples are allowed, but a named real product's actual technical "
+    "stack is a factual claim: use supplied evidence, or briefly say its exact stack "
+    "is not available. Do not present a plausible stack as the actual one. "
+    "Use plain international English, normally "
     "3-5 short sentences for a detailed example and fewer for a simple question."
 )
 
@@ -466,6 +473,13 @@ class GPTProcessor:
     @staticmethod
     def is_followup(text: str) -> bool:
         lower = GPTProcessor._fold_text(text)
+        # Resolve pronouns against conversation before treating a short question
+        # as a standalone definition (including speech-to-text "it tech stack").
+        if re.search(
+            r"\b(it|its|that|this|those|these|their)\b|\b(cua no|cai do|du an do)\b",
+            lower,
+        ):
+            return True
         if re.search(
             r"\b(how (?:is|does|do) (?:it |that |this )?(?:differ|different|difference)"
             r"|how (?:is|does|do) (?:it|that|this) .{0,30}different"
@@ -622,6 +636,18 @@ class GPTProcessor:
                 r"lon hon|tinh nang chinh|tinh nang cot loi)\b", folded
             ):
                 is_followup = True
+        followup_context = ""
+        if is_followup and recent_context:
+            # The latest exchange has precedence over older topics and RAG hits.
+            latest_exchange = recent_context.rsplit("Q: ", 1)[-1]
+            followup_context = (
+                "FOLLOW-UP ANCHOR (latest exchange):\nQ: " + latest_exchange + "\n"
+                "Resolve it/its/that and omitted subjects using this exchange first. "
+                "Keep its named product or project. The latest caption asks a new "
+                "detail about that subject, not a generic definition. Older reference "
+                "examples must not change the subject. If the caption explicitly "
+                "names a different subject, use that instead.\n\n"
+            )
         is_vietnamese_caption = self._is_vietnamese_caption(normalized)
         knowledge_domain = {
             "backend_production": "backend",
@@ -809,6 +835,7 @@ class GPTProcessor:
                         f"Yeu cau dac biet: {'Neu la follow-up thi chi tra loi y moi bang 2-3 cau ngan, khong lap lai tong quan.' if is_followup else 'Tra loi ngan gon dung trong tam.'}\n\n"
                         f"Luu y: neu caption la mot manh cau hoi ngan (fragment) nhung co ngu canh, hay suy luan no la follow-up hop le va tra loi truc tiep.\n\n"
                         f"Ngu canh gan day:\n{recent_context if recent_context else '(khong co)'}\n\n"
+                        f"{followup_context}"
                         f"{reference_block}"
                         f"Caption moi nhat:\n{normalized}\n\n---\nQUAN TRONG: Neu caption la tieng Anh (Caption la tieng Viet: khong) thi BAT BUOC tra loi bang TIENG ANH, tuyet doi khong tra loi bang tieng Viet."
                     ),
