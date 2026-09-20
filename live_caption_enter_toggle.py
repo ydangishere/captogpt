@@ -277,6 +277,11 @@ ANSWER_STYLE_PROMPT = (
     "For follow-ups, answer only the new point in 2-3 short sentences; do not repeat "
     "the overview or force a checklist. Expand only when the question requires it. "
     "Apply the same brevity and directness in Vietnamese. "
+    "For an implicit comparison such as 'how is it different from X', resolve the "
+    "missing subject from the most recent relevant conversation question and answer. "
+    "Compare that subject with X; never substitute a topic merely because it appears "
+    "in retrieved reference knowledge. If the subject is genuinely unavailable, ask "
+    "one short clarification instead of inventing the comparison. "
     "These style rules take precedence over earlier formatting or length instructions; "
     "preserve factual accuracy and never invent experience or results."
 )
@@ -319,7 +324,7 @@ class GPTProcessor:
 
     @staticmethod
     def detect_domain(text: str) -> str:
-        t = GPTProcessor._fold_text(text)
+        t = GPTProcessor._fold_text(GPTProcessor._normalize_technical_terms(text))
         if not t:
             return "general"
 
@@ -414,6 +419,13 @@ class GPTProcessor:
     @staticmethod
     def is_followup(text: str) -> bool:
         lower = GPTProcessor._fold_text(text)
+        if re.search(
+            r"\b(how (?:is|does|do) (?:it |that |this )?(?:differ|different|difference)"
+            r"|how (?:is|does|do) (?:it|that|this) .{0,30}different"
+            r"|khac (?:nhau )?(?:voi|gi)|so voi)\b",
+            lower,
+        ):
+            return True
         followup_markers = (
             "mentioned above",
             "issue above",
@@ -451,6 +463,8 @@ class GPTProcessor:
         # Correct common mis-heard technical words from Vietnamese captions.
         t = re.sub(r"\s+", " ", text).strip()
         replacements = (
+            (r"\broad\s+maps?\b", "roadmap"),
+            (r"\bbacklogs\b", "backlog"),
             (r"\bred\s*full\b", "restful"),
             (r"\brest\s*full\b", "restful"),
             (r"\bapi\s*rest\b", "rest api"),
@@ -547,8 +561,14 @@ class GPTProcessor:
             "backend_production": "backend",
             "product_owner": "product-owner",
         }.get(domain, "general")
+        retrieval_query = normalized
+        if is_followup and recent_context:
+            previous_questions = re.findall(r"^Q: (.+)$", recent_context, re.MULTILINE)
+            if previous_questions:
+                previous_question = self._normalize_technical_terms(previous_questions[-1])
+                retrieval_query = previous_question + " " + normalized
         knowledge_context = self.knowledge_base.search(
-            normalized,
+            retrieval_query,
             domain=knowledge_domain,
         )
         reference_block = ""
