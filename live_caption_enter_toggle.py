@@ -319,6 +319,14 @@ PRODUCT_OWNER_EXAMPLE_PROMPT = (
     "through verification to accepting a first payment is a concrete core workflow; "
     "'improve security' alone is not. This example is illustrative, not candidate history. "
     "Do not switch between games, fintech and unrelated products across follow-ups. "
+    "A short correction such as 'A company website' after 'Have you ever built a "
+    "website?' replaces the object of that earlier question. Answer the corrected "
+    "experience question directly; do not treat it as a request for a hypothetical "
+    "example or a definition. Prioritize the corrected subject over your previous answer. "
+    "If references only confirm involvement, state only that involvement. Do not invent "
+    "features, responsibilities, trade-offs or results to fill gaps. Ask one brief "
+    "clarification only when needed. For hypothetical examples, consistently use "
+    "would/could; never switch to 'I worked', 'I focused' or other past-tense claims. "
     "Use 3-5 short sentences when needed to cover the feature, flow, PO decision and "
     "why it meets the user's request; avoid unsupported promises about revenue."
 )
@@ -601,11 +609,17 @@ class GPTProcessor:
             return "Chua thay cau hoi ro rang trong caption moi nhat."
         domain = domain or self.detect_domain(normalized)
         is_followup = self.is_followup(lower)
-        if domain == "product_owner" and recent_context and re.search(
-            r"\b(anything else|bigger|larger|big feature|key feature|core feature|"
-            r"lon hon|tinh nang chinh|tinh nang cot loi)\b", self._fold_text(normalized)
-        ):
-            is_followup = True
+        if domain == "product_owner" and recent_context:
+            folded = self._fold_text(normalized)
+            is_clarification = bool(re.search(
+                r"^(?:(?:a|an|the)\s+|i mean\b|no[, ]|actually[, ]|"
+                r"y toi la\b|toi muon noi\b)", folded
+            )) and word_count <= 16
+            if is_clarification or re.search(
+                r"\b(anything else|bigger|larger|big feature|key feature|core feature|"
+                r"lon hon|tinh nang chinh|tinh nang cot loi)\b", folded
+            ):
+                is_followup = True
         is_vietnamese_caption = self._is_vietnamese_caption(normalized)
         knowledge_domain = {
             "backend_production": "backend",
@@ -625,6 +639,11 @@ class GPTProcessor:
             r"du an|kinh nghiem|tinh nang|vi du)\b", self._fold_text(retrieval_query)
         ):
             retrieval_query += " VietPay WWE Champions Sync Contacts"
+        if domain == "product_owner" and re.search(
+            r"\b(company|corporate|business) website\b", lower
+        ):
+            # Favor the corrected subject and match the Vietnamese reference.
+            retrieval_query = normalized + " website doanh nghiep VietPay"
         if domain == "product_owner":
             # The speaking role is fixed; reference sources can cross domains.
             product_context = self.knowledge_base.search(
