@@ -21,7 +21,8 @@ This matches your flow: Enter toggles ON/OFF, and ON mode sends continuously.
 Run these commands in the project folder:
 
 ```powershell
-cd "D:\captogpt-enter"
+git clone https://github.com/ydangishere/captogpt.git
+cd captogpt
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -38,7 +39,7 @@ Purpose:
 ## Run (PowerShell)
 
 ```powershell
-cd "D:\captogpt-enter"
+cd path\to\captogpt
 .\.venv\Scripts\Activate.ps1
 python .\live_caption_enter_toggle.py
 ```
@@ -50,6 +51,13 @@ Purpose:
 ## Quick run option
 
 You can also double-click `start.bat`.
+
+To make the API key available when double-clicking `start.bat`, save it once
+from PowerShell, then close and reopen the terminal:
+
+```powershell
+setx OPENAI_API_KEY "your_openai_api_key_here"
+```
 
 Purpose:
 

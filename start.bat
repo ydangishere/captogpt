@@ -12,7 +12,8 @@ exit /b 0
 :no_venv
 echo [Error] .venv is missing for fast start.
 echo Run one-time setup in PowerShell:
-echo   cd "D:\captogpt-enter" ^& python -m venv .venv ^& ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt
+echo   python -m venv .venv
+echo   ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt
 echo.
 pause
 exit /b 1
@@ -21,7 +22,7 @@ exit /b 1
 echo.
 echo [Error] OPENAI_API_KEY is missing.
 echo Set it one-time in PowerShell:
-echo   cd "D:\captogpt-enter" ^& setx OPENAI_API_KEY "your_real_openai_api_key"
+echo   setx OPENAI_API_KEY "your_real_openai_api_key"
 echo Then close and reopen terminal.
 echo.
 pause
