@@ -25,7 +25,7 @@ class FakeKnowledgeBase:
         self.context = context
         self.queries = []
 
-    def search(self, query, domain=None):
+    def search(self, query, domain=None, **kwargs):
         self.queries.append((query, domain))
         return self.context
 
@@ -91,9 +91,32 @@ class GPTKnowledgeIntegrationTests(TestCase):
         self.assertIn("Product Owner", messages[0]["content"])
         self.assertNotIn("Senior Backend Engineer", messages[0]["content"])
         self.assertEqual(
-            [("How do you prioritize the roadmap?", "product-owner")],
+            [
+                ("How do you prioritize the roadmap?", "product-owner"),
+                ("How do you prioritize the roadmap?", "backend"),
+            ],
             knowledge.queries,
         )
+
+    def test_product_owner_prompt_uses_light_prioritization_guidance(self):
+        client = FakeClient()
+        processor = GPTProcessor(
+            client=client,
+            knowledge_base=FakeKnowledgeBase(""),
+        )
+
+        processor.process(
+            "How do you prioritize a product backlog?",
+            domain="product_owner",
+        )
+
+        system_message = client.completions.last_request["messages"][0]["content"]
+        self.assertIn(
+            "light flow when useful, not a mandatory template",
+            system_message,
+        )
+        self.assertIn("user problem and evidence -> decision", system_message)
+        self.assertIn("one useful new decision detail", system_message)
 
     def test_controller_keeps_product_owner_followup_context(self):
         controller = EnterToggleController()
