@@ -2,6 +2,12 @@
 
 Capture Windows Live Captions and send to GPT in real-time while capture is ON.
 
+## Figma architecture & planned features
+
+**Please open and review the [Interview Coach Agent architecture and workflow diagram in Figma (node 221:31)](https://www.figma.com/design/eVmB2S0UTg8IP2yllKNH4O/temp?node-id=221-31&t=6eljU6Qq20O89JYw-4) first.** The diagram makes it much easier to understand the end-to-end flow, the roles of the Coach Orchestrator, GPT Planner, Question Generator, Answer Evaluator, Decision Engine, and how these components connect to Windows Live Captions, OpenAI, and the knowledge base.
+
+**Important implementation status:** This repository currently implements the **Live Answer Assistant** flow. The **Interview Coach Agent** shown in the Figma diagram is the *proposed target architecture*, not a completed feature. For the list of missing components and implementation priorities, see [Interview Coach roadmap](docs/INTERVIEW_COACH_ROADMAP.md).
+
 ## What this project does
 
 - Press `Enter` once: start collecting captions and send updates to GPT immediately.
