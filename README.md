@@ -8,6 +8,25 @@ Capture Windows Live Captions and send to GPT in real-time while capture is ON.
 
 **Important implementation status:** This repository currently implements the **Live Answer Assistant** flow. The **Interview Coach Agent** shown in the Figma diagram is the *proposed target architecture*, not a completed feature. For the list of missing components and implementation priorities, see [Interview Coach roadmap](docs/INTERVIEW_COACH_ROADMAP.md).
 
+## Solution Architecture & RAG Implementation
+
+**Use case:** A Windows interview assistant converts live spoken questions to captions, retrieves relevant locally maintained role-specific knowledge and sends bounded reference context to GPT to produce an answer. This is an application of **Retrieval-Augmented Generation (RAG)**, not model training or fine-tuning.
+
+**Implemented RAG flow (single horizontal line):**
+
+`Windows Live Captions → Question/domain detection → Local Markdown sections → Keyword/phrase ranking → Top relevant context (bounded) → GPT completion → Answer`
+
+**Implemented architecture decisions**
+- **Input integration:** Windows Live Captions are read through Windows UI automation. The operator toggles sending with Enter; this is not a recording/transcription server and depends on captions being available.
+- **Knowledge ownership:** `knowledge/backend/` and `knowledge/product-owner/` contain human-editable Markdown reference content. Documents are loaded on startup and split into heading-level searchable sections.
+- **Retriever:** `knowledge_base.py` normalizes Vietnamese accents, calculates deterministic keyword and phrase-overlap scores, filters by domain and adds source/section labels to the selected context. The default search returns at most three sections within a character budget; Product Owner mode uses two Product Owner sections plus an optional Backend section.
+- **Generation:** `GPTProcessor.process` appends the retrieved material as labeled reference knowledge to an OpenAI Chat Completions call, separately from the system instructions. If no section matches, the assistant can still answer using the base system prompt.
+- **Evaluation and traceability:** Unit tests exercise section loading, retrieval ranking, role selection and injection of context into model messages using a fake model client. Local source labels aid manual verification; they are not a formal groundedness benchmark.
+- **Security and cost trade-offs:** Limiting retrieved text bounds token usage, but the selected caption/knowledge content is transmitted to an external model. Do not send confidential personal or employer data without permission; keep model keys outside Git. Add masking, access policy, observable token/latency metrics and consent controls before organizational deployment.
+- **Production roadmap (not implemented):** For large corpora add incremental indexing, embeddings, vector or hybrid search, reranking, retrieval quality metrics, answer citations, redaction, latency/cost monitoring and authenticated multi-user operation.
+
+**Important implementation boundary:** This is **lexical RAG (keyword and phrase matching)**. It does **not** currently use embeddings, FAISS, a vector database, semantic similarity ranking or vector retriever. A separate Interview Coach Agent architecture in Figma is planned, not implemented; this repository implements the Live Answer Assistant.
+
 ## What this project does
 
 - Press `Enter` once: start collecting captions and send updates to GPT immediately.
